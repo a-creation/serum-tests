@@ -52,6 +52,8 @@ describe("Serum Client", () => {
   const ORDER_1_AMOUNT = 2;
   const ORDER_2_LIMIT_PRICE = 55;
   const ORDER_2_AMOUNT = 20;
+  const BASE_LOT_SIZE = 1;
+  const QUOTE_LOT_SIZE = 1;
 
   before(async () => {
 
@@ -115,13 +117,13 @@ describe("Serum Client", () => {
       TOKEN_PROGRAM_ID
     );
   
-    maker_price_acc = await createAccount(
+    maker_price_acc = await getOrCreateAssociatedTokenAccount(
       connection,
       maker,
       Token1,
       maker.publicKey
     )
-    maker_coin_acc = await createAccount(
+    maker_coin_acc = await getOrCreateAssociatedTokenAccount(
       connection,
       maker,
       Token2,
@@ -144,7 +146,7 @@ describe("Serum Client", () => {
       connection,
       feePayer,
       Token1,
-      maker_price_acc,
+      maker_price_acc.address,
       feePayer,
       MAKER_PRICE_ACC_AMOUNT
     )
@@ -232,8 +234,8 @@ describe("Serum Client", () => {
         quoteVault: market_price_account.address,
         baseMint: Token2,
         quoteMint: Token1,
-        baseLotSize: new BN(1),
-        quoteLotSize: new BN(1),
+        baseLotSize: new BN(BASE_LOT_SIZE),
+        quoteLotSize: new BN(QUOTE_LOT_SIZE),
         feeRateBps: 0,
         vaultSignerNonce: nonce,
         quoteDustThreshold: new BN(100),
@@ -279,7 +281,7 @@ describe("Serum Client", () => {
     ).add(
       market.makePlaceOrderInstruction(connection, {
         owner: feePayer.publicKey,
-        payer: maker_price_acc,
+        payer: maker_price_acc.address,
         side: "buy",
         price: ORDER_1_LIMIT_PRICE,
         size: ORDER_1_AMOUNT,
@@ -306,7 +308,7 @@ describe("Serum Client", () => {
 
     let base_vault_acc = await connection.getTokenAccountBalance(new PublicKey(market._decoded.baseVault.toBase58()))
     let quote_vault_acc = await connection.getTokenAccountBalance(new PublicKey(market._decoded.quoteVault.toBase58()))
-    let maker_price_acc_info = (await connection.getTokenAccountBalance(maker_price_acc)).value.amount;
+    let maker_price_acc_info = (await connection.getTokenAccountBalance(maker_price_acc.address)).value.amount;
 
     // This assert checks that the base_vault account is still empty
     assert.equal(parseInt(base_vault_acc.value.amount), 0);
@@ -436,8 +438,8 @@ describe("Serum Client", () => {
           connection,
           maker,
           openOrders,
-          maker_coin_acc,
-          maker_price_acc,
+          maker_coin_acc.address,
+          maker_price_acc.address,
         );
       }
     };
@@ -452,8 +454,8 @@ describe("Serum Client", () => {
     // This assert ensures that the taker_price_acc is ABOVE 0
     assert.isAbove(parseInt(taker_price_acc_info.value.amount), 0);
     
-    maker_coin_acc_info = await connection.getTokenAccountBalance(new PublicKey(maker_coin_acc.toBase58()))
-    maker_price_acc_info = await connection.getTokenAccountBalance(new PublicKey(maker_price_acc.toBase58()))
+    maker_coin_acc_info = await connection.getTokenAccountBalance(new PublicKey(maker_coin_acc.address.toBase58()))
+    maker_price_acc_info = await connection.getTokenAccountBalance(new PublicKey(maker_price_acc.address.toBase58()))
 
     // These asserts ensure that the maker has received their coin amount and that their price amount is deducted 
     assert.equal(maker_price_acc_info.value.amount, MAKER_PRICE_ACC_AMOUNT - ORDER_1_AMOUNT*ORDER_1_LIMIT_PRICE);
@@ -656,9 +658,9 @@ describe("Serum Client", () => {
   const LEFTOVER_MAKER_PRICE_ACC_AMOUNT = 10
   const MINT_TO_MAKER_PRICE_ACC = 250
   const ORDER_7_LIMIT_PRICE = 50
-  const ORDER_7_AMOUNT = 5
-  const ORDER_8_COIN_AMOUNT = 3
-  const ORDER_8_PRICE_AMOUNT = 151
+  const ORDER_7_AMOUNT = 3
+  const ORDER_8_COIN_AMOUNT = 4
+  const ORDER_8_PRICE_AMOUNT = 201
   const SEND_TAKE_DATA_2 = Buffer.concat([
     Buffer.from(new Uint8Array([0])),
     Buffer.from(new Uint8Array((new BN(13)).toArray("le", 4))), // instruction number
@@ -678,12 +680,12 @@ describe("Serum Client", () => {
       connection,
       feePayer,
       Token1,
-      maker_price_acc,
+      maker_price_acc.address,
       feePayer,
       MINT_TO_MAKER_PRICE_ACC
     )
 
-    maker_price_acc_info = await connection.getTokenAccountBalance(new PublicKey(maker_price_acc.toBase58()))
+    maker_price_acc_info = await connection.getTokenAccountBalance(new PublicKey(maker_price_acc.address.toBase58()))
 
     assert.equal(parseInt(maker_price_acc_info.value.amount), LEFTOVER_MAKER_PRICE_ACC_AMOUNT + MINT_TO_MAKER_PRICE_ACC)
 
@@ -692,7 +694,7 @@ describe("Serum Client", () => {
     tx7.add(
       market.makePlaceOrderInstruction(connection, {
         owner: feePayer.publicKey,
-        payer: maker_price_acc,
+        payer: maker_price_acc.address,
         side: "buy",
         price: ORDER_7_LIMIT_PRICE,
         size: ORDER_7_AMOUNT,
@@ -715,7 +717,7 @@ describe("Serum Client", () => {
       }
     );
 
-    maker_price_acc_info = await connection.getTokenAccountBalance(new PublicKey(maker_price_acc.toBase58()))
+    maker_price_acc_info = await connection.getTokenAccountBalance(new PublicKey(maker_price_acc.address.toBase58()))
 
     assert.equal(parseInt(maker_price_acc_info.value.amount), LEFTOVER_MAKER_PRICE_ACC_AMOUNT + MINT_TO_MAKER_PRICE_ACC - (ORDER_7_LIMIT_PRICE*ORDER_7_AMOUNT))
 
@@ -796,8 +798,13 @@ describe("Serum Client", () => {
     let coin_amt_before = processSendTaker_coin_acc_info.value.amount
     let price_amt_before = processSendTaker_price_acc_info.value.amount
 
-    console.log('processSendTaker_coin_acc.value.amount', processSendTaker_coin_acc_info.value.amount)
-    console.log('processSendTaker_price_acc.value.amount', processSendTaker_price_acc_info.value.amount)
+    console.log('processSendTaker_coin_acc.value.amount before', processSendTaker_coin_acc_info.value.amount)
+    console.log('processSendTaker_price_acc.value.amount before', processSendTaker_price_acc_info.value.amount)
+
+    market = await serum.Market.load(connection, marketKP.publicKey, {}, programId);
+
+    console.log('market baseDepositsTotal', market._decoded.baseDepositsTotal.toString())
+    console.log('market quoteDepositsTotal', market._decoded.quoteDepositsTotal.toString())
 
     let txid8 = await sendAndConfirmTransaction(
       connection,
@@ -816,8 +823,160 @@ describe("Serum Client", () => {
     let coin_amt_after = processSendTaker_coin_acc_info.value.amount
     let price_amt_after = processSendTaker_price_acc_info.value.amount
 
-    assert.equal(parseInt(coin_amt_after), parseInt(coin_amt_before) - ORDER_8_COIN_AMOUNT)
-    assert.isAbove(parseInt(price_amt_after), parseInt(price_amt_before))
+    // assert.equal(parseInt(coin_amt_after), parseInt(coin_amt_before) - ORDER_8_COIN_AMOUNT)
+    // assert.isAbove(parseInt(price_amt_after), parseInt(price_amt_before))
+
+    console.log('processSendTaker_coin_acc.value.amount', processSendTaker_coin_acc_info.value.amount)
+    console.log('processSendTaker_price_acc.value.amount', processSendTaker_price_acc_info.value.amount)
+
+    market = await serum.Market.load(connection, marketKP.publicKey, {}, programId);
+
+    console.log('market baseDepositsTotal', market._decoded.baseDepositsTotal.toString())
+    console.log('market quoteDepositsTotal', market._decoded.quoteDepositsTotal.toString())
+
+    console.log('marketKP.pk', marketKP.publicKey.toBase58())
+    console.log('marketKP', marketKP)
+    console.log('vaultOwner', vaultOwner.toBase58())
+
+    maker_price_acc = await getOrCreateAssociatedTokenAccount(
+      connection,
+      maker,
+      Token1,
+      maker.publicKey
+    )
+    maker_coin_acc = await getOrCreateAssociatedTokenAccount(
+      connection,
+      maker,
+      Token2,
+      maker.publicKey
+    )
+    console.log('token1 PRICE TOKEN PK', Token1.toBase58())
+    console.log('token2 COIN TOKEN PK', Token2.toBase58())
+    console.log('makerPriceAccamount', maker_price_acc.address.toBase58())
+    console.log('makerPriceAccamount', maker_price_acc.amount)
+    console.log('makerCoinAccamount', maker_coin_acc.address.toBase58())
+    console.log('makerCoinAccamount', maker_coin_acc.amount)
+    console.log('maker.publicKey', maker.publicKey.toBase58())
+    console.log('maker', maker)
+
+
+    await mintTo(
+      connection,
+      feePayer,
+      Token1,
+      maker_price_acc.address,
+      feePayer,
+      100000000
+    )
+
+    await mintTo(
+      connection,
+      taker,
+      Token2,
+      taker_coin_acc.address,
+      feePayer,
+      10000
+    )
+
+    const tx9 = new Transaction();
+
+    tx9.add(
+      market.makePlaceOrderInstruction(connection, {
+        owner: feePayer.publicKey,
+        payer: maker_price_acc.address,
+        side: "buy",
+        price: 52,
+        size: 10,
+        orderType: 'limit',
+        clientId: undefined,
+        openOrdersAddressKey: open_orders_account_maker.publicKey,
+        openOrdersAccount: undefined,
+        feeDiscountPubkey: undefined
+      })
+    ).add(
+      market.makePlaceOrderInstruction(connection, {
+        owner: feePayer.publicKey,
+        payer: maker_price_acc.address,
+        side: "buy",
+        price: 50,
+        size: 8,
+        orderType: 'limit',
+        clientId: undefined,
+        openOrdersAddressKey: open_orders_account_maker.publicKey,
+        openOrdersAccount: undefined,
+        feeDiscountPubkey: undefined
+      })
+    ).add(
+      market.makePlaceOrderInstruction(connection, {
+        owner: feePayer.publicKey,
+        payer: maker_price_acc.address,
+        side: "buy",
+        price: 53,
+        size: 5,
+        orderType: 'limit',
+        clientId: undefined,
+        openOrdersAddressKey: open_orders_account_maker.publicKey,
+        openOrdersAccount: undefined,
+        feeDiscountPubkey: undefined
+      })
+    );
+
+    let txid9 = await sendAndConfirmTransaction(
+      connection,
+      tx9,
+      [feePayer],
+      {
+        skipPreflight: true,
+        preflightCommitment: "confirmed",
+        confirmation: "confirmed",
+      }
+    );
+  
+    console.log('Transaction 9 complete', txid9);
+
+    const tx10 = new Transaction();
+
+
+    tx10.add(
+      market.makePlaceOrderInstruction(connection, {
+        owner: taker.publicKey,
+        payer: taker_coin_acc.address,
+        side: "sell",
+        price: 57,
+        size: 5,
+        orderType: 'limit',
+        clientId: undefined,
+        openOrdersAddressKey: open_orders_account_taker.publicKey,
+        openOrdersAccount: undefined,
+        feeDiscountPubkey: undefined
+      })
+    ).add(
+      market.makePlaceOrderInstruction(connection, {
+        owner: taker.publicKey,
+        payer: taker_coin_acc.address,
+        side: "sell",
+        price: 58,
+        size: 8,
+        orderType: 'limit',
+        clientId: undefined,
+        openOrdersAddressKey: open_orders_account_taker.publicKey,
+        openOrdersAccount: undefined,
+        feeDiscountPubkey: undefined
+      })
+    );
+
+    let txid10 = await sendAndConfirmTransaction(
+      connection,
+      tx10,
+      [taker],
+      {
+        skipPreflight: true,
+        preflightCommitment: "confirmed",
+        confirmation: "confirmed",
+      }
+    );
+  
+    console.log('Transaction 10 complete', txid10);
 
 
   });
@@ -826,6 +985,8 @@ describe("Serum Client", () => {
 
 
 async function getVaultOwnerAndNonce(marketPublicKey, dexProgramId = DEX_PID) {
+  console.log('marketPublicKey', marketPublicKey)
+  console.log('dexProgramId', dexProgramId)
   const nonce = new BN(0);
   while (nonce.toNumber() < 255) {
     try {
